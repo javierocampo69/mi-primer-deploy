@@ -1,12 +1,243 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mi primera página</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mi primera página</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(160deg, #ff7e5f, #feb47b);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .juego-wrap {
+    text-align: center;
+    color: #4a2c1c;
+    padding: 16px;
+  }
+  h1 {
+    margin: 0 0 4px;
+    font-size: 2.1rem;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    color: #fff;
+    text-shadow: 2px 2px 0 rgba(74,44,28,0.35);
+  }
+  .instrucciones {
+    margin: 0 0 14px;
+    font-size: 0.95rem;
+    opacity: 0.9;
+  }
+  .canvas-box {
+    position: relative;
+    display: inline-block;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+    background: #a1e3ff;
+    touch-action: manipulation;
+  }
+  canvas {
+    display: block;
+    width: min(600px, 90vw);
+    height: auto;
+  }
+  .puntos {
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #2d3436;
+    text-shadow: 1px 1px 0 rgba(255,255,255,0.6);
+  }
+  .game-over {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: rgba(45, 52, 54, 0.75);
+    color: #fff;
+  }
+  .game-over.visible { display: flex; }
+  .game-over h2 {
+    margin: 0;
+    font-size: 1.8rem;
+    color: #ffeaa7;
+  }
+  .game-over p { margin: 2px 0; font-size: 0.95rem; }
+</style>
 </head>
 <body>
-  <h1>Mi primera página</h1>
-  <p>Esta es una página web de práctica hecha para aprender a usar HTML.</p>
+  <div class="juego-wrap">
+    <h1>Mi primer juego</h1>
+    <p class="instrucciones">Toca o presiona espacio para saltar</p>
+    <div class="canvas-box" id="cajaJuego">
+      <canvas id="lienzo" width="600" height="300"></canvas>
+      <div class="puntos" id="puntos">0</div>
+      <div class="game-over" id="pantallaFin">
+        <h2>Game Over</h2>
+        <p id="puntajeFinal"></p>
+        <p>Toca o presiona espacio para reiniciar</p>
+      </div>
+    </div>
+  </div>
+
+<script>
+const canvas = document.getElementById('lienzo');
+const ctx = canvas.getContext('2d');
+const puntosEl = document.getElementById('puntos');
+const pantallaFin = document.getElementById('pantallaFin');
+const puntajeFinalEl = document.getElementById('puntajeFinal');
+
+const SUELO_Y = 240;
+const GRAVEDAD = 0.6;
+const SALTO_V = -11;
+const PERSONAJE_X = 70;
+
+let personaje, obstaculos, velocidad, puntaje, estado, temporizadorSpawn, tiempo;
+
+function reiniciar() {
+  personaje = { y: SUELO_Y, vy: 0, saltando: false };
+  obstaculos = [];
+  velocidad = 4;
+  puntaje = 0;
+  tiempo = 0;
+  temporizadorSpawn = 60;
+  estado = 'jugando';
+  puntosEl.textContent = '0';
+  pantallaFin.classList.remove('visible');
+  requestAnimationFrame(bucle);
+}
+
+function saltar() {
+  if (estado === 'gameover') {
+    reiniciar();
+    return;
+  }
+  if (!personaje.saltando) {
+    personaje.vy = SALTO_V;
+    personaje.saltando = true;
+  }
+}
+
+function crearObstaculo() {
+  const alturas = [30, 40, 55];
+  const colores = ['#00b894', '#e17055', '#fdcb6e', '#0984e3'];
+  const h = alturas[Math.floor(Math.random() * alturas.length)];
+  obstaculos.push({
+    x: canvas.width + 10,
+    ancho: 20 + Math.random() * 14,
+    alto: h,
+    color: colores[Math.floor(Math.random() * colores.length)],
+    pasado: false
+  });
+}
+
+function chocan(a, b) {
+  return a.x < b.x + b.ancho && a.x + a.ancho > b.x && a.y < b.y + b.alto && a.y + a.alto > b.y;
+}
+
+function dibujarPersonaje() {
+  const baseY = personaje.y;
+  const balanceo = personaje.saltando ? 0 : Math.sin(tiempo * 0.4) * 6;
+
+  ctx.fillStyle = '#d63031';
+  ctx.fillRect(PERSONAJE_X - 10, baseY - 34, 20, 22);
+
+  ctx.fillStyle = '#ffeaa7';
+  ctx.beginPath();
+  ctx.arc(PERSONAJE_X, baseY - 40, 10, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#2d3436';
+  ctx.fillRect(PERSONAJE_X - 8, baseY - 12 + balanceo, 6, 12);
+  ctx.fillRect(PERSONAJE_X + 2, baseY - 12 - balanceo, 6, 12);
+}
+
+function dibujarSuelo() {
+  ctx.fillStyle = '#55efc4';
+  ctx.fillRect(0, SUELO_Y, canvas.width, canvas.height - SUELO_Y);
+  ctx.fillStyle = '#00b894';
+  ctx.fillRect(0, SUELO_Y, canvas.width, 4);
+}
+
+function bucle() {
+  if (estado !== 'jugando') return;
+  tiempo++;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#a1e3ff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  personaje.vy += GRAVEDAD;
+  personaje.y += personaje.vy;
+  if (personaje.y > SUELO_Y) {
+    personaje.y = SUELO_Y;
+    personaje.vy = 0;
+    personaje.saltando = false;
+  }
+
+  temporizadorSpawn--;
+  if (temporizadorSpawn <= 0) {
+    crearObstaculo();
+    temporizadorSpawn = 55 + Math.random() * 45;
+  }
+
+  const cajaPersonaje = { x: PERSONAJE_X - 10, y: personaje.y - 40, ancho: 20, alto: 40 };
+
+  for (let i = obstaculos.length - 1; i >= 0; i--) {
+    const o = obstaculos[i];
+    o.x -= velocidad;
+    const cajaObstaculo = { x: o.x, y: SUELO_Y - o.alto, ancho: o.ancho, alto: o.alto };
+
+    if (chocan(cajaPersonaje, cajaObstaculo)) {
+      estado = 'gameover';
+      puntajeFinalEl.textContent = 'Puntos: ' + puntaje;
+      pantallaFin.classList.add('visible');
+    }
+
+    if (!o.pasado && o.x + o.ancho < PERSONAJE_X) {
+      o.pasado = true;
+      puntaje++;
+      puntosEl.textContent = puntaje;
+      velocidad = Math.min(4 + puntaje * 0.15, 11);
+    }
+
+    if (o.x + o.ancho < 0) obstaculos.splice(i, 1);
+  }
+
+  dibujarSuelo();
+  for (const o of obstaculos) {
+    ctx.fillStyle = o.color;
+    ctx.fillRect(o.x, SUELO_Y - o.alto, o.ancho, o.alto);
+  }
+  dibujarPersonaje();
+
+  if (estado === 'jugando') requestAnimationFrame(bucle);
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') {
+    e.preventDefault();
+    saltar();
+  }
+});
+document.getElementById('cajaJuego').addEventListener('click', saltar);
+document.getElementById('cajaJuego').addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  saltar();
+}, { passive: false });
+
+reiniciar();
+</script>
 </body>
 </html>
